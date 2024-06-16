@@ -2,7 +2,7 @@
   <ul>
     {% for page in pages | selectByField('blogPost') | sort(true, false, 'fields.date') %}
       <li>
-        {{ page.fields.date }} —
+        <date>{{ page.fields.date }}</date> —
         <a href="{{ page.fields.url }}">
           {{ page.fields.title }}
         </a>

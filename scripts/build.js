@@ -1,100 +1,63 @@
 import 'dotenv/config';
 
-import fse from 'fs-extra';
+import fs from 'fs';
 import path from 'path';
 
+import config from '../config.js';
 import client from '../lib/contentful.js';
 import nunjucks from '../lib/nunjucks.js';
 
-import config from '../config.js';
-
 /**
- * Deletes the dist directory to ensure a clean build.
+ * Removes the dist directory.
  *
- * @returns Promise<void>
+ * @returns {Promise<void>}
  */
 function clean() {
-  return fse.remove('dist');
+  return new Promise((resolve, reject) => {
+    fs.rm('dist', { recursive: true }, (err) => {
+      if (err && err.code !== 'ENOENT') {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
 }
 
 /**
- * Copies static files from src/static to the dist directory.
+ * Copies the src/static directory to dist.
  *
- * @returns Promise<void>
+ * @returns {Promise<void>}
  */
 function copyStatic() {
-  return fse.copy('src/static', 'dist');
-}
-
-/**
- * Gets entries from Contentful for a given content type.
- *
- * @param {string} contentType
- * @returns Promise<Array>
- */
-async function getEntries(contentType) {
-  const data = await client.getEntries({
-    content_type: contentType,
+  return new Promise((resolve, reject) => {
+    fs.cp('src/static', 'dist', { recursive: true }, (err) => {
+      if (err && err.code !== 'ENOENT') {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
   });
-
-  return data.items;
 }
 
 /**
- * Gets all entries from Contentful, as defined in config.js.
+ * Writes a file.
  *
- * @returns Promise.<Array>
+ * @param {string} pathToFile
+ * @param {string} data
+ * @returns {Promise<void>}
  */
-async function getAllEntries() {
-  const [pages, ...rest] = await Promise.all([
-    getEntries('page'),
+function writeFile(pathToFile, data) {
+  return new Promise((resolve, reject) => {
+    const dirname = path.dirname(pathToFile);
 
-    // From config.js.
-    ...config.data.map(({ contentType }) => (
-      getEntries(contentType)
-    )),
-  ]);
+    fs.mkdir(dirname, { recursive: true }, (err) => {
+      if (err) return reject(err);
 
-  return [pages, ...rest];
-}
+      fs.writeFile(pathToFile, data, (err) => {
+        if (err) return reject(err);
 
-/**
- * Gets all data and conforms entries data into usable page
- * data using the keys defined in config.js.
- *
- * @returns Promise<Object>
- */
-async function getData() {
-  const [pages, ...rest] = await getAllEntries();
-
-  return rest.reduce((acc, items, i) => {
-    const key = config.data[i].key;
-
-    return {
-      ...acc,
-      [key]: items,
-    };
-  }, { pages });
-}
-
-/**
- * Builds a page with data using the given template and
- * context.
- *
- * @param {string} template
- * @param {string} dest
- * @param {Object} ctx
- * @returns Promise<void>
- */
-function buildPage(template, dest, ctx = {}) {
-  const outputPath = path.normalize(dest);
-
-  return new Promise((resolve) => {
-    nunjucks.render(template, ctx, (err, res) => {
-      if (err) throw err;
-
-      fse.outputFile(outputPath, res, () => {
-        console.log(`Wrote "${outputPath}"`);
         resolve();
       });
     });
@@ -102,39 +65,123 @@ function buildPage(template, dest, ctx = {}) {
 }
 
 /**
- * Builds all pages, as defined in config.js.
+ * Fetches entries from the Contentful CDN and returns them
+ * as a key-value map.
  *
- * @returns Promise<void>
+ * @returns {Promise<{string: Object[]}>}
  */
-async function buildPages() {
-  const data = await getData();
-
-  // Template globals.
-  nunjucks.addGlobal('pages', data.pages);
-
-  // Build pages.
+function getData() {
   return Promise.all([
-    ...config.targets.map(({ template, dest }) => buildPage(template, dest)),
+    ...config.entries.map(({ key, contentType }) => {
+      return (
+        client
+          .getEntries({ content_type: contentType })
+          .then((data) => {
+            return [key, data.items];
+          })
+      );
+    })
+  ]).then(Object.fromEntries);
+}
 
-    // Contentful pages.
-    ...data.pages.map((page) => {
-      const ctx = page.fields;
-      const outputPath = `dist/${ctx.url}/index.html`;
+/**
+ * Renders a Nunjucks template.
+ *
+ * @param {string} template
+ * @param {Object} ctx
+ * @returns {Promise<string>}
+ */
+function renderTemplate(template, ctx) {
+  return new Promise((resolve, reject) => {
+    nunjucks.render(template, ctx, (err, res) => {
+      if (err) return reject(err);
 
-      return buildPage('page.njk', outputPath, ctx);
-    }),
+      resolve(res);
+    });
+  });
+}
+
+/**
+ * Renders a target.
+ *
+ * @param {Object} target
+ * @param {Object} ctx
+ * @returns {Promise<void>}
+ */
+function renderTarget(target, ctx) {
+  const template = path.normalize(target.template);
+  const dest = path.normalize(target.dest);
+
+  return (
+    renderTemplate(template, ctx)
+      .then((res) => writeFile(dest, res))
+      .then(() => {
+        console.log(`Wrote file "${dest}"`);
+      })
+  );
+}
+
+/**
+ * Builds a target.
+ *
+ * @param {Object} target
+ * @param {Object} data
+ * @returns {Promise<void>}
+ */
+function buildTarget(target, data) {
+  const ctx = {};
+
+  // Insert included data.
+  if (target.include) {
+    target.include.forEach((key) => {
+      ctx[key] = data[key];
+    });
+  }
+
+  // Insert extra context.
+  if (target.extraContext) {
+    Object.assign(ctx, target.extraContext);
+  }
+
+  return renderTarget(target, ctx);
+}
+
+/**
+ * Builds all targets recursively.
+ *
+ * @param {Object[]} targets
+ * @param {Object} data
+ * @returns {Promise<void>}
+ */
+function buildTargets(targets, data) {
+  return Promise.all([
+    ...targets.map((target) => {
+      if (target.entries) {
+        return data[target.entries].map((entry, ...rest) => {
+          const newTarget = target.handler(entry, ...rest);
+          const newTargetArr = Array.isArray(newTarget) ? newTarget : [newTarget];
+
+          return buildTargets(newTargetArr, data);
+        });
+      } else {
+        return buildTarget(target, data);
+      }
+    })
   ]);
 }
 
 /**
- * Builds the application.
+ * Builds the static site.
  *
- * @returns Promise<void>
+ * @returns {Promise<void>}
  */
-async function build() {
-  await clean();
-  await buildPages();
-  await copyStatic();
+function build() {
+  return (
+    clean()
+      .then(() => copyStatic())
+      .then(() => getData())
+      .then((data) => buildTargets(config.targets, data))
+  );
 }
 
 build();

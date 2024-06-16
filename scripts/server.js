@@ -1,12 +1,11 @@
-import handler from 'serve-handler';
-import http from 'http';
+import express from 'express';
 
-const server = http.createServer((req, res) => {
-  return handler(req, res, {
-    public: 'dist',
-  });
-});
+const app = express();
 
-server.listen(3000, () => {
+app.use(express.static('dist', {
+  dotfiles: 'allow',
+}));
+
+app.listen(3000, () => {
   console.log('Listening on port 3000...');
 });
