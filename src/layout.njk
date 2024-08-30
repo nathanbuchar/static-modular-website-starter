@@ -2,14 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
+
     {% if title %}
       <title>{{ title }} — My app </title>
     {% else %}
       <title>My app</title>
     {% endif %}
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="/css/styles.css" />
-    <script type="module" src="./js/main.js"></script>
+    <script defer type="module" src="/js/main.js"></script>
+
+    {% block extraHead %}{% endblock %}
   </head>
   <body>
     <div id="content">
