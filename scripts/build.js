@@ -3,9 +3,37 @@ import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
 
-import config from '../config.js';
-import client from '../lib/contentful.js';
-import nunjucks from '../lib/nunjucks.js';
+/**
+ * Synchronously iterates over each element in an array,
+ * allowing execution of asynchronous code in the iteratee.
+ * 
+ * @example
+ * 
+ * iterate(items, (item, next) => {
+ *   doSomethingAsync(item, () => {
+ *     next();
+ *   });
+ * }, () => {
+ *   // Done
+ * })
+ * 
+ * @param {Array} arr
+ * @param {Function} iteratee
+ * @param {Function} done
+ */
+function iterate(arr, iteratee, done) {
+  const iterator = (i) => {
+    if (i in arr) {
+      iteratee(arr[i], () => {
+        iterator(i + 1);
+      });
+    } else {
+      done();
+    }
+  };
+
+  iterator(0);
+}
 
 /**
  * Removes the dist directory.
@@ -25,16 +53,19 @@ function clean() {
 }
 
 /**
- * Copies the src/static directory to dist.
+ * Copies files from src to dest recursively.
  *
+ * @param {Target.src} src
+ * @param {Target.dest} dest
  * @returns {Promise<void>}
  */
-function copyStatic() {
+function copyFiles(src, dest) {
   return new Promise((resolve, reject) => {
-    fs.cp('src/static', 'dist', { recursive: true }, (err) => {
+    fs.cp(src, dest, { recursive: true }, (err) => {
       if (err && err.code !== 'ENOENT') {
         reject(err);
       } else {
+        console.log(`Copied "${src}" to "${dest}"`);
         resolve();
       }
     });
@@ -53,121 +84,120 @@ function writeFile(pathToFile, data) {
     const dirname = path.dirname(pathToFile);
 
     fs.mkdir(dirname, { recursive: true }, (err) => {
-      if (err) return reject(err);
-
-      fs.writeFile(pathToFile, data, (err) => {
-        if (err) return reject(err);
-
-        resolve();
-      });
+      if (err) {
+        reject(err);
+      } else {
+        fs.writeFile(pathToFile, data, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            console.log(`Wrote file "${pathToFile}"`);
+            resolve();
+          }
+        });
+      }
     });
   });
 }
 
 /**
- * Fetches entries from the Contentful CDN and returns them
- * as a key-value map.
- *
- * @returns {Promise<{string: Object[]}>}
+ * Gets data from the CMS client.
+ * 
+ * @param {Config} config
+ * @returns {Promise<Data> | void} data
  */
-function getData() {
-  return Promise.all([
-    ...config.entries.map(({ key, contentType }) => {
-      return (
-        client
-          .getEntries({ content_type: contentType })
-          .then((data) => {
-            return [key, data.items];
-          })
-      );
-    })
-  ]).then(Object.fromEntries);
-}
-
-/**
- * Renders a Nunjucks template.
- *
- * @param {string} template
- * @param {Object} ctx
- * @returns {Promise<string>}
- */
-function renderTemplate(template, ctx) {
-  return new Promise((resolve, reject) => {
-    nunjucks.render(template, ctx, (err, res) => {
-      if (err) return reject(err);
-
-      resolve(res);
+function getData(config) {
+  if (config.sources) {
+    return config.client.getData(config.sources).then((data) => {
+      return data;
     });
-  });
+  }
 }
 
 /**
  * Renders a target.
  *
- * @param {Object} target
+ * @param {Config} config
+ * @param {Target} target
  * @param {Object} ctx
  * @returns {Promise<void>}
  */
-function renderTarget(target, ctx) {
+function renderTarget(config, target, ctx) {
   const template = path.normalize(target.template);
   const dest = path.normalize(target.dest);
+  const render = config.engine.render;
 
   return (
-    renderTemplate(template, ctx)
+    render(template, ctx)
       .then((res) => writeFile(dest, res))
-      .then(() => {
-        console.log(`Wrote file "${dest}"`);
-      })
   );
 }
 
 /**
  * Builds a target.
  *
- * @param {Object} target
- * @param {Object} data
+ * @param {Config} config
+ * @param {Data} data
+ * @param {Target} target
  * @returns {Promise<void>}
  */
-function buildTarget(target, data) {
-  const ctx = {};
+function buildTarget(config, data, target) {
+  if (target.src) {
+    return copyFiles(target.src, target.dest);
+  } else {
+    const ctx = {};
 
-  // Insert included data.
-  if (target.include) {
-    target.include.forEach((key) => {
-      ctx[key] = data[key];
-    });
+    // Apply included data.
+    if (target.include) {
+      target.include.forEach((key) => {
+        ctx[key] = data[key];
+      });
+    }
+
+    // Apply extra context.
+    if (target.extraContext) {
+      Object.assign(ctx, target.extraContext);
+    }
+
+    return renderTarget(config, target, ctx);
   }
-
-  // Insert extra context.
-  if (target.extraContext) {
-    Object.assign(ctx, target.extraContext);
-  }
-
-  return renderTarget(target, ctx);
 }
 
 /**
  * Builds all targets recursively.
  *
- * @param {Object[]} targets
- * @param {Object} data
+ * @param {Config} config
+ * @param {Data} data
+ * @param {(Target | TargetFn)[]} [targets]
  * @returns {Promise<void>}
  */
-function buildTargets(targets, data) {
-  return Promise.all([
-    ...targets.map((target) => {
-      if (target.entries) {
-        return data[target.entries].map((entry, ...rest) => {
-          const newTarget = target.handler(entry, ...rest);
-          const newTargetArr = Array.isArray(newTarget) ? newTarget : [newTarget];
+function buildTargets(config, data, targets = config.targets ?? []) {
+  return new Promise((resolve) => {
+    iterate(targets, (target, next) => {
+      if (typeof target === 'function') {
+        const newTarget = target(data);
+        const newTargetArr = Array.isArray(newTarget) ? newTarget : [newTarget];
 
-          return buildTargets(newTargetArr, data);
-        });
+        buildTargets(config, data, newTargetArr).then(next);
       } else {
-        return buildTarget(target, data);
+        buildTarget(config, data, target).then(next);
       }
-    })
-  ]);
+    }, resolve);
+  });
+}
+
+/**
+ * Reads the config file from the directory in which npm
+ * was invoked.
+ * 
+ * @returns {Promise<Config>}
+ */
+function getConfig() {
+  const pathToConfig = path.join(process.cwd(), 'config.js');
+
+  return import(pathToConfig).then((exp) => {
+    return exp.default;
+  });
 }
 
 /**
@@ -178,9 +208,13 @@ function buildTargets(targets, data) {
 function build() {
   return (
     clean()
-      .then(() => copyStatic())
-      .then(() => getData())
-      .then((data) => buildTargets(config.targets, data))
+      .then(() => getConfig())
+      .then((config) => {
+        return (
+          getData(config)
+            .then((data) => buildTargets(config, data))
+        );
+      })
   );
 }
 
