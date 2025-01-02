@@ -1,47 +1,14 @@
-import 'dotenv/config';
-
 import fs from 'fs';
 import path from 'path';
 
 /**
- * Synchronously iterates over each element in an array,
- * allowing execution of asynchronous code in the iteratee.
- * 
- * @example
- * 
- * iterate(items, (item, next) => {
- *   doSomethingAsync(item, () => {
- *     next();
- *   });
- * }, () => {
- *   // Done
- * })
- * 
- * @param {Array} arr
- * @param {Function} iteratee
- * @param {Function} done
- */
-function iterate(arr, iteratee, done) {
-  const iterator = (i) => {
-    if (i in arr) {
-      iteratee(arr[i], () => {
-        iterator(i + 1);
-      });
-    } else {
-      done();
-    }
-  };
-
-  iterator(0);
-}
-
-/**
  * Removes the dist directory.
  *
+ * @async
  * @returns {Promise<void>}
  */
-function clean() {
-  return new Promise((resolve, reject) => {
+async function clean() {
+  await new Promise((resolve, reject) => {
     fs.rm('dist', { recursive: true }, (err) => {
       if (err && err.code !== 'ENOENT') {
         reject(err);
@@ -55,12 +22,13 @@ function clean() {
 /**
  * Copies files from src to dest recursively.
  *
+ * @async
  * @param {Target.src} src
  * @param {Target.dest} dest
  * @returns {Promise<void>}
  */
-function copyFiles(src, dest) {
-  return new Promise((resolve, reject) => {
+async function copyFiles(src, dest) {
+  await new Promise((resolve, reject) => {
     fs.cp(src, dest, { recursive: true }, (err) => {
       if (err && err.code !== 'ENOENT') {
         reject(err);
@@ -75,12 +43,13 @@ function copyFiles(src, dest) {
 /**
  * Writes a file.
  *
+ * @async
  * @param {string} pathToFile
  * @param {string} data
  * @returns {Promise<void>}
  */
-function writeFile(pathToFile, data) {
-  return new Promise((resolve, reject) => {
+async function writeFile(pathToFile, data) {
+  await new Promise((resolve, reject) => {
     const dirname = path.dirname(pathToFile);
 
     fs.mkdir(dirname, { recursive: true }, (err) => {
@@ -103,47 +72,48 @@ function writeFile(pathToFile, data) {
 /**
  * Gets data from the CMS client.
  * 
+ * @async
  * @param {Config} config
  * @returns {Promise<Data> | void} data
  */
-function getData(config) {
+async function getData(config) {
   if (config.sources) {
-    return config.client.getData(config.sources).then((data) => {
-      return data;
-    });
+    const data = await config.client.getData(config.sources);
+
+    return data;
   }
 }
 
 /**
  * Renders a target.
  *
+ * @async
  * @param {Config} config
  * @param {Target} target
  * @param {Object} ctx
  * @returns {Promise<void>}
  */
-function renderTarget(config, target, ctx) {
+async function renderTarget(config, target, ctx) {
   const template = path.normalize(target.template);
   const dest = path.normalize(target.dest);
-  const render = config.engine.render;
+  
+  const res = await config.engine.render(template, ctx);
 
-  return (
-    render(template, ctx)
-      .then((res) => writeFile(dest, res))
-  );
+  await writeFile(dest, res);
 }
 
 /**
  * Builds a target.
  *
+ * @async
  * @param {Config} config
  * @param {Data} data
  * @param {Target} target
  * @returns {Promise<void>}
  */
-function buildTarget(config, data, target) {
+async function buildTarget(config, data, target) {
   if (target.src) {
-    return copyFiles(target.src, target.dest);
+    await copyFiles(target.src, target.dest);
   } else {
     const ctx = {};
 
@@ -159,63 +129,61 @@ function buildTarget(config, data, target) {
       Object.assign(ctx, target.extraContext);
     }
 
-    return renderTarget(config, target, ctx);
+    await renderTarget(config, target, ctx);
   }
 }
 
 /**
  * Builds all targets recursively.
  *
+ * @async
  * @param {Config} config
  * @param {Data} data
  * @param {(Target | TargetFn)[]} [targets]
  * @returns {Promise<void>}
  */
-function buildTargets(config, data, targets = config.targets ?? []) {
-  return new Promise((resolve) => {
-    iterate(targets, (target, next) => {
-      if (typeof target === 'function') {
-        const newTarget = target(data);
-        const newTargetArr = Array.isArray(newTarget) ? newTarget : [newTarget];
+async function buildTargets(config, data, targets = []) {
+  for (const target of targets) {
+    if (typeof target === 'function') {
+      const newTarget = await target(data);
+      const newTargetArr = Array.isArray(newTarget) ? newTarget : [newTarget];
 
-        buildTargets(config, data, newTargetArr).then(next);
-      } else {
-        buildTarget(config, data, target).then(next);
-      }
-    }, resolve);
-  });
+      await buildTargets(config, data, newTargetArr);
+    } else {
+      await buildTarget(config, data, target);
+    }
+  }
 }
 
 /**
  * Reads the config file from the directory in which npm
  * was invoked.
  * 
+ * @async
  * @returns {Promise<Config>}
  */
-function getConfig() {
-  const pathToConfig = path.join(process.cwd(), 'config.js');
+async function getConfig() {
+  const npmDir = process.cwd();
+  const pathToConfig = path.resolve(npmDir, 'config.js');
 
-  return import(pathToConfig).then((exp) => {
-    return exp.default;
-  });
+  const mod = await import(pathToConfig);
+
+  return mod.default;
 }
 
 /**
  * Builds the static site.
  *
+ * @async
  * @returns {Promise<void>}
  */
-function build() {
-  return (
-    clean()
-      .then(() => getConfig())
-      .then((config) => {
-        return (
-          getData(config)
-            .then((data) => buildTargets(config, data))
-        );
-      })
-  );
+async function build() {
+  await clean();
+
+  const config = await getConfig();
+  const data = await getData(config);
+
+  await buildTargets(config, data, config.targets);
 }
 
 build();

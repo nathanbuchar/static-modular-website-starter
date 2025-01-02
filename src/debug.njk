@@ -1,0 +1,8 @@
+{% extends "layout.njk" %}
+
+{% set title = "Debug" %}
+{% set url = "/debug" %}
+
+{% block content %}
+  {{ ctx() | debug }}
+{% endblock %}

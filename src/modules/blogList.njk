@@ -1,12 +1,14 @@
 <div>
   <ul>
-    {% for page in pages | selectByField('blogPost') | sort(true, false, 'fields.date') %}
-      <li>
-        <date>{{ page.fields.date }}</date> —
-        <a href="{{ page.fields.url }}">
-          {{ page.fields.title }}
-        </a>
-      </li>
+    {% for page in pages | sort(true, false, 'fields.date') %}
+      {% if page.blogPost %}
+        <li>
+          <date>{{ page.fields.date }}</date> —
+          <a href="{{ page.fields.url }}">
+            {{ page.fields.title }}
+          </a>
+        </li>
+      {% endif %}
     {% endfor %}
   </ul>
 </div>

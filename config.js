@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 import client from './lib/client.js';
 import engine from './lib/engine.js';
 
@@ -5,8 +7,8 @@ import engine from './lib/engine.js';
  * @typedef {Object} Config
  * @prop {Client} client
  * @prop {Engine} engine
- * @prop {Source[]} sources
- * @prop {(Target | TargetFn)[]} targets
+ * @prop {Source[]} [sources]
+ * @prop {(Target | TargetFn)[]} [targets]
  */
 
 /**
@@ -27,14 +29,16 @@ import engine from './lib/engine.js';
 /**
  * @callback TargetFn
  * @param {Data} data
- * @returns {Target}
+ * @returns {(Target | TargetFn)[]}
  */
 
 /**
  * @typedef {Record<Source['name'], Object>} Data
  */
 
-/** @type {Config} */
+/**
+ * @type {Config}
+ */
 const config = {
   client,
   engine,
@@ -54,6 +58,15 @@ const config = {
       dest: 'dist/404.html',
       include: ['pages']
     },
+    {
+      template: 'debug.njk',
+      dest: 'dist/debug/index.html',
+      include: ['pages']
+    },
+    {
+      template: 'test.njk',
+      dest: 'dist/test/index.html'
+    },
     (data) => data.pages.map((page) => {
       return {
         template: 'page.njk',
@@ -63,7 +76,7 @@ const config = {
           ...page.fields
         }
       };
-    }),
+    })
   ]
 };
 
