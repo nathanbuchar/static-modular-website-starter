@@ -1,7 +1,7 @@
 <div>
   <ul>
     {% for page in pages | sort(true, false, 'fields.date') %}
-      {% if page.blogPost %}
+      {% if page.fields.blogPost %}
         <li>
           <date>{{ page.fields.date }}</date> —
           <a href="{{ page.fields.url }}">

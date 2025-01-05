@@ -19,16 +19,16 @@
     <div id="content">
       <header>
         <nav>
-          <a href="/" class="{{ 'active' if url == '/' }}">
+          <a href="/" class="{{ 'active' if pageKey == 'home' }}">
             Home
           </a>
-          <a href="/blog" class="{{ 'active' if blogPost or url == '/blog' }}">
+          <a href="/blog" class="{{ 'active' if blogPost or pageKey == 'blog' }}">
             Blog
           </a>
-          <a href="/test" class="{{ 'active' if url == '/test' }}">
+          <a href="/test" class="{{ 'active' if pageKey == 'test' }}">
             Test
           </a>
-          <a href="/debug" class="{{ 'active' if url == '/debug' }}">
+          <a href="/debug" class="{{ 'active' if pageKey == 'debug' }}">
             Debug
           </a>
         </nav>

@@ -27,13 +27,9 @@ import engine from './lib/engine.js';
  */
 
 /**
- * @callback TargetFn
+ * @function TargetFn
  * @param {Data} data
  * @returns {(Target | TargetFn)[]}
- */
-
-/**
- * @typedef {Record<Source['name'], Object>} Data
  */
 
 /**
@@ -56,16 +52,15 @@ const config = {
     {
       template: '404.njk',
       dest: 'dist/404.html',
-      include: ['pages']
-    },
-    {
-      template: 'debug.njk',
-      dest: 'dist/debug/index.html',
-      include: ['pages']
     },
     {
       template: 'test.njk',
       dest: 'dist/test/index.html'
+    },
+    {
+      template: 'debug.njk',
+      dest: 'dist/debug/index.html',
+      include: ['pages'],
     },
     (data) => data.pages.map((page) => {
       return {

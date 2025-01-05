@@ -1,7 +1,7 @@
 {% extends "layout.njk" %}
 
+{% set pageKey = "debug" %}
 {% set title = "Debug" %}
-{% set url = "/debug" %}
 
 {% block content %}
   {{ ctx() | debug }}

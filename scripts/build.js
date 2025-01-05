@@ -74,14 +74,12 @@ async function writeFile(pathToFile, data) {
  * 
  * @async
  * @param {Config} config
- * @returns {Promise<Data> | void} data
+ * @returns {Promise<Data>} data
  */
 async function getData(config) {
-  if (config.sources) {
-    const data = await config.client.getData(config.sources);
+  const data = await config.client.getData(config.sources);
 
-    return data;
-  }
+  return data;
 }
 
 /**
@@ -139,10 +137,10 @@ async function buildTarget(config, data, target) {
  * @async
  * @param {Config} config
  * @param {Data} data
- * @param {(Target | TargetFn)[]} [targets]
+ * @param {(Target | TargetFn)[]} targets
  * @returns {Promise<void>}
  */
-async function buildTargets(config, data, targets = []) {
+async function buildTargets(config, data, targets) {
   for (const target of targets) {
     if (typeof target === 'function') {
       const newTarget = await target(data);
@@ -166,9 +164,17 @@ async function getConfig() {
   const npmDir = process.cwd();
   const pathToConfig = path.resolve(npmDir, 'config.js');
 
-  const mod = await import(pathToConfig);
+  try {
+    const mod = await import(pathToConfig);
+  } catch (err) {
+    throw new Error('Config file is missing');
+  }
 
-  return mod.default;
+  return {
+    sources: [],
+    targets: [],
+    ...mod.default
+  };
 }
 
 /**
