@@ -10,9 +10,23 @@ import path from 'path';
  */
 
 /**
+ * @typedef {Object} Client
+ * @prop {(sources: Source[]) => Promise<Data>} getData
+ */
+
+/**
  * @typedef {Object} Source
  * @prop {string} name
  * @prop {string} contentType
+ */
+
+/**
+ * @typedef {Record<Source['name'], Object>} Data
+ */
+
+/**
+ * @typedef {Object} Engine
+ * @prop {(template: string, ctx: Object) => Promise<string>} render
  */
 
 /**
