@@ -153,7 +153,7 @@ async function buildTarget(config, data, target) {
         } else if (data.hasOwnProperty(target.include)) {
           ctx[key] = data[key]
         }
-      } else if (Array.isArray(target.include) {
+      } else if (Array.isArray(target.include)) {
         target.include.forEach((key) => {
           ctx[key] = data[key];
         });
