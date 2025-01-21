@@ -1,48 +1,54 @@
 import 'dotenv/config';
 
-import client from './lib/client.js';
+import clean from './lib/clean.js';
+import contentful from './lib/contentful.js';
+import copy from './lib/copy.js';
 import engine from './lib/engine.js';
 
 const config = {
-  client,
   engine,
-  sources: [
-    {
-      name: 'pages',
-      contentType: 'page'
-    }
+  plugins: [
+    clean('dist'),
+    contentful([
+      {
+        key: 'pages',
+        contentType: 'page',
+      },
+    ]),
+    copy([
+      {
+        from: 'src/static', 
+        to: 'dist',
+      },
+    ]),
   ],
   targets: [
-    {
-      src: 'src/static',
-      dest: 'dist'
-    },
     {
       template: '404.njk',
       dest: 'dist/404.html',
     },
     {
       template: 'test.njk',
-      dest: 'dist/test/index.html'
+      dest: 'dist/test/index.html',
     },
     {
       template: 'debug.njk',
       dest: 'dist/debug/index.html',
-      include: '*'
+      include: '*',
     },
-    (data) => {
-      return data.pages.map((page) => {
+    (ctx) => {
+      return ctx.pages.map((page) => {
         return {
           template: 'page.njk',
           dest: `dist/${page.fields.url}/index.html`,
           include: ['pages'],
           extraContext: {
-            ...page.fields
-          }
+            ...page.fields,
+          },
         };
       })
-    }
-  ]
+    },
+  ],
 };
 
 export default config;
