@@ -1,9 +1,10 @@
 import 'dotenv/config';
 
-import clean from './lib/clean.js';
-import contentful from './lib/contentful.js';
-import copy from './lib/copy.js';
 import engine from './lib/engine.js';
+
+import clean from './lib/plugins/clean.js';
+import contentful from './lib/plugins/contentful.js';
+import copy from './lib/plugins/copy.js';
 
 const config = {
   engine,
