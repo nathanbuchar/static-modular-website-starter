@@ -1,5 +1,6 @@
 import 'dotenv/config';
 
+import client from './lib/client.js';
 import engine from './lib/engine.js';
 
 import clean from './lib/plugins/clean.js';
@@ -10,18 +11,19 @@ const config = {
   engine,
   plugins: [
     clean('dist'),
-    contentful([
-      {
-        key: 'pages',
-        contentType: 'page',
-      },
-    ]),
-    copy([
-      {
-        from: 'src/static', 
-        to: 'dist',
-      },
-    ]),
+    contentful({
+      client,
+      sources: [
+        {
+          key: 'pages',
+          contentType: 'page',
+        },
+      ],
+    }),
+    copy({
+      from: 'src/static', 
+      to: 'dist',
+    }),
   ],
   targets: [
     {
@@ -47,7 +49,7 @@ const config = {
             ...page.fields,
           },
         };
-      })
+      });
     },
   ],
 };
